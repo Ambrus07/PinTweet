@@ -1,6 +1,6 @@
-# PinTweet 🤎
+# PinTweet 
 
-Twitter és Pinterest hibrid közösségi platform — barna tónusokban.
+Twitter és Pinterest hibrid közösségi platform 
 
 ## Telepítés és indítás
 
