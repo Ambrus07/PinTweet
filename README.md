@@ -30,3 +30,16 @@ src/
 public/
   index.html — HTML sablon
 ```
+
+
+///BACKEND///
+1. cd backend
+2. python -m venv venv
+3. CMD-ben venv\Scripts\activate
+4. pip install -r requirements.txt
+5. python manage.py migrate
+6. python manage.py runserver
+
+
+
+
