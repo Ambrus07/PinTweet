@@ -321,6 +321,103 @@ body {
   transform: translateY(-1px);
 }
 
+/* ── POST CARD ACTIONS (edit / delete) ─────────────────────────── */
+
+.post-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.post-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.post-action-btn i { font-size: 15px; }
+
+.post-action-btn.edit:hover {
+  background: var(--blue-ultra);
+  border-color: var(--blue-light);
+  color: var(--blue-deep);
+  transform: translateY(-1px);
+}
+
+.post-action-btn.delete {
+  color: var(--danger);
+}
+
+.post-action-btn.delete:hover {
+  background: #FBEAE7;
+  border-color: var(--danger);
+  transform: translateY(-1px);
+}
+
+.post-action-btn.save {
+  background: var(--blue-deep);
+  border-color: var(--blue-deep);
+  color: #fff;
+}
+
+.post-action-btn.save:hover {
+  background: var(--blue-mid);
+  border-color: var(--blue-mid);
+  transform: translateY(-1px);
+}
+
+.post-action-btn.cancel:hover {
+  background: var(--surface2);
+  transform: translateY(-1px);
+}
+
+.post-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.post-edit-box {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.post-edit-textarea {
+  width: 100%;
+  border: 1px solid var(--blue-light);
+  background: var(--blue-ultra);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-family: var(--font);
+  font-size: 15px;
+  color: var(--text);
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.post-edit-textarea:focus {
+  border-color: var(--blue-mid);
+}
+
+.post-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 /* ── TWEET CARD ─────────────────────────────────────────────── */
 
 .tweet-card {

@@ -8,7 +8,8 @@ import {
   createPost,
   fetchBoards,
   createBoard,
-  deletePost
+  deletePost,
+  updatePost
 } from './api';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -45,6 +46,10 @@ function HomePage({ user }) {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     fetchPosts()
@@ -80,6 +85,7 @@ function HomePage({ user }) {
 
 
   const handleDelete = async (id) => {
+    setDeletingId(id);
     try {
       await deletePost(id);
 
@@ -87,6 +93,34 @@ function HomePage({ user }) {
 
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleEditStart = (post) => {
+    setEditingId(post.id);
+    setEditText(post.description || '');
+    setError('');
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const handleEditSave = async (id) => {
+    setSavingEdit(true);
+    setError('');
+    try {
+      const updated = await updatePost(id, { description: editText });
+      setPosts(posts.map(post => post.id === id ? { ...post, ...updated } : post));
+      setEditingId(null);
+      setEditText('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -182,22 +216,53 @@ function HomePage({ user }) {
               />
             )}
 
-            <div style={{ marginTop: 10 }}>
-              {p.description}
-            </div>
+            {editingId === p.id ? (
+              <div className="post-edit-box">
+                <textarea
+                  className="post-edit-textarea"
+                  rows="3"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  autoFocus
+                />
+                <div className="post-edit-actions">
+                  <button
+                    className="post-action-btn cancel"
+                    onClick={handleEditCancel}
+                    disabled={savingEdit}
+                  >
+                    <i className="ti ti-x"></i> Mégse
+                  </button>
+                  <button
+                    className="post-action-btn save"
+                    onClick={() => handleEditSave(p.id)}
+                    disabled={savingEdit || !editText.trim()}
+                  >
+                    <i className="ti ti-check"></i> {savingEdit ? 'Mentés...' : 'Mentés'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 10 }}>
+                {p.description}
+              </div>
+            )}
 
-
-            {Number(p.author) === Number(user.id) && (
-              <div style={{ marginTop: 15 }}>
-                <button>
-                  ✏️ Szerkesztés
+            {Number(p.author) === Number(user.id) && editingId !== p.id && (
+              <div className="post-card-actions">
+                <button
+                  className="post-action-btn edit"
+                  onClick={() => handleEditStart(p)}
+                >
+                  <i className="ti ti-pencil"></i> Szerkesztés
                 </button>
 
                 <button
-                  style={{ marginLeft: 10 }}
+                  className="post-action-btn delete"
                   onClick={() => handleDelete(p.id)}
+                  disabled={deletingId === p.id}
                 >
-                  🗑️ Törlés
+                  <i className="ti ti-trash"></i> {deletingId === p.id ? 'Törlés...' : 'Törlés'}
                 </button>
               </div>
             )}
