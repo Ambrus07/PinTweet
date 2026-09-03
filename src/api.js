@@ -136,6 +136,27 @@ export async function createBoard(name) {
 }
 
 
+export async function updatePost(id, { title, description }) {
+  const formData = new FormData();
+
+  if (title !== undefined) formData.append("title", title);
+  if (description !== undefined) formData.append("description", description);
+
+  const res = await apiFetch(`/posts/${id}/`, {
+    method: "PATCH",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      Object.values(err).flat().join(" ") || "Nem sikerült szerkeszteni a posztot."
+    );
+  }
+
+  return res.json();
+}
+
 export async function deletePost(id) {
   const res = await apiFetch(`/posts/${id}/`, {
     method: "DELETE",
