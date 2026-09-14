@@ -136,6 +136,69 @@ export async function createBoard(name) {
 }
 
 
+export async function updateProfile({ bio, avatar, cover_image } = {}) {
+  const formData = new FormData();
+
+  if (bio !== undefined) formData.append("bio", bio);
+  if (avatar) formData.append("avatar", avatar);
+  if (cover_image) formData.append("cover_image", cover_image);
+
+  const res = await apiFetch("/auth/profile/update/", {
+    method: "PATCH",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      Object.values(err).flat().join(" ") || "Nem sikerült frissíteni a profilt."
+    );
+  }
+
+  return res.json();
+}
+
+export async function toggleLike(postId) {
+  const res = await apiFetch(`/posts/${postId}/like/`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült kezelni a kedvelést.");
+  }
+
+  return res.json();
+}
+
+export async function fetchComments(postId) {
+  const res = await apiFetch(`/posts/${postId}/comments/`);
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült betölteni a hozzászólásokat.");
+  }
+
+  return res.json();
+}
+
+export async function addComment(postId, content) {
+  const formData = new FormData();
+  formData.append("content", content);
+
+  const res = await apiFetch(`/posts/${postId}/comments/`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      Object.values(err).flat().join(" ") || "Nem sikerült elküldeni a hozzászólást."
+    );
+  }
+
+  return res.json();
+}
+
 export async function updatePost(id, { title, description }) {
   const formData = new FormData();
 

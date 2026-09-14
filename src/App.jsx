@@ -9,7 +9,11 @@ import {
   fetchBoards,
   createBoard,
   deletePost,
-  updatePost
+  updatePost,
+  updateProfile,
+  toggleLike,
+  fetchComments,
+  addComment
 } from './api';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -124,6 +128,86 @@ function HomePage({ user }) {
     }
   };
 
+  const handleToggleLike = async (id) => {
+    // optimistic update
+    setPosts(posts.map(post => post.id === id
+      ? {
+          ...post,
+          is_liked: !post.is_liked,
+          likes_count: post.is_liked ? Math.max(0, post.likes_count - 1) : post.likes_count + 1,
+        }
+      : post
+    ));
+    try {
+      const result = await toggleLike(id);
+      setPosts(prev => prev.map(post => post.id === id
+        ? { ...post, is_liked: result.liked, likes_count: result.likes_count }
+        : post
+      ));
+    } catch (err) {
+      // revert on failure
+      setPosts(prev => prev.map(post => post.id === id
+        ? {
+            ...post,
+            is_liked: !post.is_liked,
+            likes_count: post.is_liked ? Math.max(0, post.likes_count - 1) : post.likes_count + 1,
+          }
+        : post
+      ));
+      setError(err.message);
+    }
+  };
+
+  const handleToggleComments = async (id) => {
+    setPosts(posts.map(post => post.id === id
+      ? { ...post, commentsOpen: !post.commentsOpen }
+      : post
+    ));
+
+    const post = posts.find(p => p.id === id);
+    if (post && !post.commentsOpen && !post.commentsLoaded) {
+      setPosts(prev => prev.map(p => p.id === id ? { ...p, commentsLoading: true } : p));
+      try {
+        const comments = await fetchComments(id);
+        setPosts(prev => prev.map(p => p.id === id
+          ? { ...p, comments, commentsLoaded: true, commentsLoading: false }
+          : p
+        ));
+      } catch (err) {
+        setPosts(prev => prev.map(p => p.id === id ? { ...p, commentsLoading: false } : p));
+        setError(err.message);
+      }
+    }
+  };
+
+  const handleCommentTextChange = (id, value) => {
+    setPosts(posts.map(post => post.id === id ? { ...post, commentDraft: value } : post));
+  };
+
+  const handleAddComment = async (id) => {
+    const post = posts.find(p => p.id === id);
+    const content = (post?.commentDraft || '').trim();
+    if (!content) return;
+
+    setPosts(prev => prev.map(p => p.id === id ? { ...p, commentPosting: true } : p));
+    try {
+      const newComment = await addComment(id, content);
+      setPosts(prev => prev.map(p => p.id === id
+        ? {
+            ...p,
+            comments: [newComment, ...(p.comments || [])],
+            comments_count: p.comments_count + 1,
+            commentDraft: '',
+            commentPosting: false,
+          }
+        : p
+      ));
+    } catch (err) {
+      setPosts(prev => prev.map(p => p.id === id ? { ...p, commentPosting: false } : p));
+      setError(err.message);
+    }
+  };
+
   return (
     <>
       <div className="feed-header">
@@ -208,11 +292,7 @@ function HomePage({ user }) {
               <img
                 src={p.image}
                 alt=""
-                style={{
-                  width: "100%",
-                  borderRadius: 12,
-                  marginTop: 10
-                }}
+                className="post-image"
               />
             )}
 
@@ -264,6 +344,64 @@ function HomePage({ user }) {
                 >
                   <i className="ti ti-trash"></i> {deletingId === p.id ? 'Törlés...' : 'Törlés'}
                 </button>
+              </div>
+            )}
+
+            <div className="post-engagement">
+              <button
+                className={`engagement-btn like${p.is_liked ? ' active' : ''}`}
+                onClick={() => handleToggleLike(p.id)}
+              >
+                <i className={`ti ${p.is_liked ? 'ti-heart-filled' : 'ti-heart'}`}></i>
+                {p.likes_count > 0 ? p.likes_count : ''} Kedvelés
+              </button>
+
+              <button
+                className={`engagement-btn comment${p.commentsOpen ? ' active' : ''}`}
+                onClick={() => handleToggleComments(p.id)}
+              >
+                <i className="ti ti-message-circle"></i>
+                {p.comments_count > 0 ? p.comments_count : ''} Hozzászólás
+              </button>
+            </div>
+
+            {p.commentsOpen && (
+              <div className="comment-section">
+                <div className="comment-input-row">
+                  <div className="avatar-sm">{user.initials}</div>
+                  <input
+                    type="text"
+                    placeholder="Írj hozzászólást..."
+                    value={p.commentDraft || ''}
+                    onChange={e => handleCommentTextChange(p.id, e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddComment(p.id)}
+                  />
+                  <button
+                    className="comment-send-btn"
+                    onClick={() => handleAddComment(p.id)}
+                    disabled={p.commentPosting || !(p.commentDraft || '').trim()}
+                  >
+                    <i className="ti ti-send"></i>
+                  </button>
+                </div>
+
+                {p.commentsLoading ? (
+                  <div className="comment-loading">Betöltés...</div>
+                ) : (
+                  (p.comments || []).map(c => (
+                    <div key={c.id} className="comment-item">
+                      <div className="avatar-sm small">{(c.username || '?').slice(0, 2).toUpperCase()}</div>
+                      <div className="comment-body">
+                        <span className="comment-author">@{c.username}</span>
+                        <span className="comment-text">{c.content}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {p.commentsLoaded && (p.comments || []).length === 0 && !p.commentsLoading && (
+                  <div className="comment-empty">Még nincs hozzászólás. Legyél te az első!</div>
+                )}
               </div>
             )}
 
@@ -462,21 +600,137 @@ function MessagesPage() {
   );
 }
 
-function ProfilePage({ user, onLogout }) {
+function ProfilePage({ user, onLogout, onUpdateUser }) {
   const [activeTab, setActiveTab] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [bio, setBio] = useState(user.bio || '');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const avatarPreview = avatarFile ? URL.createObjectURL(avatarFile) : user.avatar;
+  const coverPreview = coverFile ? URL.createObjectURL(coverFile) : user.cover_image;
+
+  const startEdit = () => {
+    setBio(user.bio || '');
+    setAvatarFile(null);
+    setCoverFile(null);
+    setError('');
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setError('');
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await updateProfile({ bio, avatar: avatarFile, cover_image: coverFile });
+      onUpdateUser({
+        bio: updated.bio,
+        avatar: updated.avatar || user.avatar,
+        cover_image: updated.cover_image || user.cover_image,
+      });
+      setEditing(false);
+      setAvatarFile(null);
+      setCoverFile(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
-      <div className="profile-cover"></div>
+      <div
+        className="profile-cover"
+        style={coverPreview ? {
+          backgroundImage: `url(${coverPreview})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        } : undefined}
+      >
+        {editing && (
+          <label className="profile-cover-upload">
+            <i className="ti ti-camera"></i> Borítókép módosítása
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={e => setCoverFile(e.target.files[0])}
+            />
+          </label>
+        )}
+      </div>
       <div className="profile-section" style={{ position: 'relative' }}>
-        <div className="profile-avatar-lg">{user.initials}</div>
-        <button className="profile-edit-btn">Profil szerkesztése</button>
+        <div className="profile-avatar-wrap">
+          {avatarPreview ? (
+            <img className="profile-avatar-lg" src={avatarPreview} alt="" />
+          ) : (
+            <div className="profile-avatar-lg">{user.initials}</div>
+          )}
+          {editing && (
+            <label className="profile-avatar-upload-btn" title="Profilkép módosítása">
+              <i className="ti ti-camera"></i>
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={e => setAvatarFile(e.target.files[0])}
+              />
+            </label>
+          )}
+        </div>
+
+        {!editing && (
+          <button className="profile-edit-btn" onClick={startEdit}>
+            <i className="ti ti-pencil"></i> Profil szerkesztése
+          </button>
+        )}
+
         <div className="profile-name-lg">{user.name}</div>
         <div className="profile-handle-lg">{user.handle}</div>
-        <div className="profile-bio">— bio a backendből jön —</div>
+
+        {editing ? (
+          <div className="profile-edit-form">
+            <label className="profile-edit-label">Bio</label>
+            <textarea
+              className="post-edit-textarea"
+              rows="3"
+              maxLength={500}
+              placeholder="Mesélj magadról..."
+              value={bio}
+              onChange={e => setBio(e.target.value)}
+              autoFocus
+            />
+            <div className="profile-edit-charcount">{bio.length}/500</div>
+
+            {error && <div className="auth-error"><i className="ti ti-alert-circle"></i> {error}</div>}
+
+            <div className="post-edit-actions">
+              <button className="post-action-btn cancel" onClick={cancelEdit} disabled={saving}>
+                <i className="ti ti-x"></i> Mégse
+              </button>
+              <button className="post-action-btn save" onClick={saveEdit} disabled={saving}>
+                <i className="ti ti-check"></i> {saving ? 'Mentés...' : 'Mentés'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="profile-bio">
+            {user.bio || 'Még nincs bio megadva.'}
+          </div>
+        )}
+
         <div className="profile-stats">
           <div className="stat"><span className="stat-num">—</span><span className="stat-label">bejegyzés</span></div>
-          <div className="stat"><span className="stat-num">—</span><span className="stat-label">követő</span></div>
-          <div className="stat"><span className="stat-num">—</span><span className="stat-label">követett</span></div>
+          <div className="stat"><span className="stat-num">{user.followers_count ?? '—'}</span><span className="stat-label">követő</span></div>
+          <div className="stat"><span className="stat-num">{user.following_count ?? '—'}</span><span className="stat-label">követett</span></div>
         </div>
       </div>
       <div className="feed-tabs" style={{ padding: '0 24px', borderBottom: '1px solid var(--border)' }}>
@@ -532,6 +786,11 @@ function LoginPage({ onLogin, onSwitch }) {
         name: profileData.username,
         handle: `@${profileData.username}`,
         initials,
+        bio: profileData.bio || '',
+        avatar: profileData.avatar || null,
+        cover_image: profileData.cover_image || null,
+        followers_count: profileData.followers_count || 0,
+        following_count: profileData.following_count || 0,
       });
     } catch (err) {
       setError(err.message || 'Hiba történt a bejelentkezés során.');
@@ -623,6 +882,11 @@ function RegisterPage({ onLogin, onSwitch }) {
         name: userData.username,
         handle: `@${userData.username}`,
         initials,
+        bio: userData.bio || '',
+        avatar: userData.avatar || null,
+        cover_image: userData.cover_image || null,
+        followers_count: userData.followers_count || 0,
+        following_count: userData.following_count || 0,
       });
     } catch (err) {
       setError(err.message || 'Hiba történt a regisztráció során.');
@@ -726,6 +990,10 @@ export default function App() {
     setUser(userData);
   };
 
+  const handleUserUpdate = (updates) => {
+    setUser(prev => ({ ...prev, ...updates }));
+  };
+
   const handleLogout = () => {
     logout();
     setUser(null);
@@ -745,7 +1013,7 @@ export default function App() {
     saved: <SavedPage />,
     boards: <BoardsPage />,
     messages: <MessagesPage />,
-    profile: <ProfilePage user={user} onLogout={handleLogout} />,
+    profile: <ProfilePage user={user} onLogout={handleLogout} onUpdateUser={handleUserUpdate} />,
   };
 
   return (

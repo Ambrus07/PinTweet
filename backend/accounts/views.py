@@ -34,7 +34,7 @@ def register(request):
 
         return Response(
             {
-                "user": UserSerializer(user).data,
+                "user": UserSerializer(user, context={"request": request}).data,
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
             },
@@ -51,7 +51,8 @@ def register(request):
 @permission_classes([IsAuthenticated])
 def profile(request):
     serializer = UserSerializer(
-        request.user
+        request.user,
+        context={"request": request}
     )
 
     return Response(serializer.data)
@@ -69,7 +70,9 @@ def update_profile(request):
     if serializer.is_valid():
         serializer.save()
 
-        return Response(serializer.data)
+        return Response(
+            UserSerializer(request.user, context={"request": request}).data
+        )
 
     return Response(
         serializer.errors,
@@ -90,7 +93,7 @@ def user_profile(request, user_id):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    serializer = UserSerializer(user)
+    serializer = UserSerializer(user, context={"request": request})
 
     return Response(serializer.data)
 
