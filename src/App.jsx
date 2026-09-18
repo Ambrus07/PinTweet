@@ -13,7 +13,12 @@ import {
   updateProfile,
   toggleLike,
   fetchComments,
-  addComment
+  addComment,
+  searchUsers,
+  fetchConversations,
+  startConversation,
+  fetchConversationMessages,
+  sendConversationMessage
 } from './api';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -538,15 +543,97 @@ function BoardsPage() {
   );
 }
 
-function MessagesPage() {
-  const [active, setActive] = useState(null);
+function MessagesPage({ user }) {
+  const [conversations, setConversations] = useState([]);
+  const [loadingConvos, setLoadingConvos] = useState(true);
+  const [active, setActive] = useState(null); // { id, other }
   const [input, setInput] = useState('');
   const [msgs, setMsgs] = useState([]);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
-  const send = () => {
-    if (!input.trim()) return;
-    setMsgs([...msgs, { text: input, me: true }]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  const loadConversations = async () => {
+    setLoadingConvos(true);
+    try {
+      const data = await fetchConversations();
+      setConversations(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingConvos(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  const otherOf = (conv) =>
+    (conv.participants || []).find(p => Number(p.user) !== Number(user.id)) || {};
+
+  const openConversation = async (conv) => {
+    const other = otherOf(conv);
+    setActive({ id: conv.id, other });
+    setMsgs([]);
+    setLoadingMsgs(true);
+    try {
+      const data = await fetchConversationMessages(conv.id);
+      setMsgs(data);
+      loadConversations(); // frissítjük az olvasatlan számot a listában
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingMsgs(false);
+    }
+  };
+
+  const send = async () => {
+    if (!input.trim() || !active) return;
+    const content = input.trim();
     setInput('');
+    setSending(true);
+    try {
+      const newMsg = await sendConversationMessage(active.id, content);
+      setMsgs(prev => [...prev, newMsg]);
+      loadConversations();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const runSearch = async (q) => {
+    setQuery(q);
+    if (!q.trim()) { setResults([]); return; }
+    setSearching(true);
+    try {
+      const data = await searchUsers(q.trim());
+      setResults(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const startChat = async (targetUser) => {
+    try {
+      const conv = await startConversation(targetUser.id);
+      setSearchOpen(false);
+      setQuery('');
+      setResults([]);
+      await loadConversations();
+      openConversation(conv);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   if (active) {
@@ -557,20 +644,28 @@ function MessagesPage() {
             <i className="ti ti-arrow-left"></i>
           </button>
           <div className="tweet-avatar" style={{ background: '#3D6B9F', width: 38, height: 38, fontSize: 13 }}>
-            {active.initials}
+            {(active.other.username || '?').slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <div className="tweet-name" style={{ fontSize: 14 }}>{active.name}</div>
-            <div className="profile-handle" style={{ color: 'var(--muted)' }}>{active.handle}</div>
+            <div className="tweet-name" style={{ fontSize: 14 }}>{active.other.username}</div>
+            <div className="profile-handle" style={{ color: 'var(--muted)' }}>@{active.other.username}</div>
           </div>
         </div>
         <div className="chat-messages">
-          {msgs.length === 0 && (
+          {loadingMsgs ? (
+            <EmptyState icon="ti-message" title="Betöltés..." sub="Az üzenetek betöltése folyamatban" />
+          ) : msgs.length === 0 ? (
             <EmptyState icon="ti-message" title="Még nincs üzenet" sub="Küldj az első üzenetet!" />
+          ) : (
+            msgs.map((m) => (
+              <div
+                key={m.id}
+                className={`chat-bubble ${Number(m.sender) === Number(user.id) ? 'me' : 'them'}`}
+              >
+                {m.content}
+              </div>
+            ))
           )}
-          {msgs.map((m, i) => (
-            <div key={i} className={`chat-bubble ${m.me ? 'me' : 'them'}`}>{m.text}</div>
-          ))}
         </div>
         <div className="chat-input-row">
           <input
@@ -578,8 +673,9 @@ function MessagesPage() {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && send()}
             placeholder="Írj üzenetet..."
+            disabled={sending}
           />
-          <button onClick={send} className="compose-post" style={{ padding: '10px 16px' }}>
+          <button onClick={send} className="compose-post" style={{ padding: '10px 16px' }} disabled={sending || !input.trim()}>
             <i className="ti ti-send"></i>
           </button>
         </div>
@@ -589,13 +685,66 @@ function MessagesPage() {
 
   return (
     <>
-      <div className="feed-header"><h2>Üzenetek</h2></div>
-      {/* TODO: GET /api/conversations */}
-      <EmptyState
-        icon="ti-message-2"
-        title="Nincsenek üzenetek"
-        sub="Csatlakoztasd a backendet a GET /api/conversations végponton keresztül"
-      />
+      <div className="feed-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h2>Üzenetek</h2>
+        <button className="compose-post" style={{ padding: '8px 16px' }} onClick={() => setSearchOpen(o => !o)}>
+          <i className="ti ti-plus"></i> Új üzenet
+        </button>
+      </div>
+
+      {error && <div className="auth-error" style={{ margin: '0 20px' }}><i className="ti ti-alert-circle"></i> {error}</div>}
+
+      {searchOpen && (
+        <div className="message-search-box">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Felhasználónév keresése..."
+            value={query}
+            onChange={e => runSearch(e.target.value)}
+          />
+          {searching && <div className="comment-loading">Keresés...</div>}
+          {!searching && query && results.length === 0 && (
+            <div className="comment-empty">Nincs ilyen felhasználó.</div>
+          )}
+          {results.map(u => (
+            <div key={u.id} className="message-search-result" onClick={() => startChat(u)}>
+              <div className="avatar-sm small">{u.username.slice(0, 2).toUpperCase()}</div>
+              <span>@{u.username}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loadingConvos ? (
+        <EmptyState icon="ti-message-2" title="Betöltés..." sub="A beszélgetések betöltése folyamatban" />
+      ) : conversations.length === 0 ? (
+        <EmptyState
+          icon="ti-message-2"
+          title="Nincsenek üzenetek"
+          sub="Kattints az 'Új üzenet' gombra egy beszélgetés indításához"
+        />
+      ) : (
+        <div className="conversation-list">
+          {conversations.map(conv => {
+            const other = otherOf(conv);
+            return (
+              <div key={conv.id} className="conversation-item" onClick={() => openConversation(conv)}>
+                <div className="avatar-sm">{(other.username || '?').slice(0, 2).toUpperCase()}</div>
+                <div className="conversation-info">
+                  <div className="conversation-name">
+                    @{other.username}
+                    {conv.unread_count > 0 && <span className="unread-badge">{conv.unread_count}</span>}
+                  </div>
+                  <div className="conversation-preview">
+                    {conv.last_message ? conv.last_message.content : 'Nincs még üzenet'}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
@@ -1012,7 +1161,7 @@ export default function App() {
     notifs: <NotificationsPage />,
     saved: <SavedPage />,
     boards: <BoardsPage />,
-    messages: <MessagesPage />,
+    messages: <MessagesPage user={user} />,
     profile: <ProfilePage user={user} onLogout={handleLogout} onUpdateUser={handleUserUpdate} />,
   };
 

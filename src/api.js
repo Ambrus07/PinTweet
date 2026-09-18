@@ -231,3 +231,63 @@ export async function deletePost(id) {
 
   return true;
 }
+
+// ── PRIVÁT ÜZENETEK ──────────────────────────────────────────────
+
+export async function searchUsers(query) {
+  const res = await apiFetch(`/auth/search/?q=${encodeURIComponent(query)}`);
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült keresni a felhasználók között.");
+  }
+
+  return res.json();
+}
+
+export async function fetchConversations() {
+  const res = await apiFetch(`/messages/`);
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült betölteni a beszélgetéseket.");
+  }
+
+  return res.json();
+}
+
+export async function startConversation(userId) {
+  const res = await apiFetch(`/messages/create/${userId}/`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült elindítani a beszélgetést.");
+  }
+
+  return res.json();
+}
+
+export async function fetchConversationMessages(conversationId) {
+  const res = await apiFetch(`/messages/${conversationId}/`);
+
+  if (!res.ok) {
+    throw new Error("Nem sikerült betölteni az üzeneteket.");
+  }
+
+  return res.json();
+}
+
+export async function sendConversationMessage(conversationId, content) {
+  const res = await apiFetch(`/messages/${conversationId}/send/`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      Object.values(err).flat().join(" ") || "Nem sikerült elküldeni az üzenetet."
+    );
+  }
+
+  return res.json();
+}
