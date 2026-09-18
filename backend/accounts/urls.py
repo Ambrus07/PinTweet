@@ -5,6 +5,7 @@ from .views import (
     profile,
     update_profile,
     user_profile,
+    search_users,
     follow_user,
     unfollow_user,
 )
@@ -26,6 +27,12 @@ urlpatterns = [
         "profile/update/",
         update_profile,
         name="update-profile",
+    ),
+
+    path(
+        "search/",
+        search_users,
+        name="search-users",
     ),
 
     path(

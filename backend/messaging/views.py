@@ -42,7 +42,8 @@ def conversations(request):
 
     serializer = ConversationSerializer(
         chats,
-        many=True
+        many=True,
+        context={"request": request},
     )
 
     return Response(serializer.data)
@@ -64,6 +65,24 @@ def create_conversation(
             status=status.HTTP_404_NOT_FOUND
         )
 
+    if other_user == request.user:
+        return Response(
+            {"error": "You cannot message yourself"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    existing = (
+        Conversation.objects.filter(
+            conversationparticipant__user=request.user
+        ).filter(
+            conversationparticipant__user=other_user
+        ).first()
+    )
+
+    if existing:
+        serializer = ConversationSerializer(existing, context={"request": request})
+        return Response(serializer.data)
+
     conversation = Conversation.objects.create()
 
     ConversationParticipant.objects.create(
@@ -77,10 +96,18 @@ def create_conversation(
     )
 
     serializer = ConversationSerializer(
-        conversation
+        conversation,
+        context={"request": request},
     )
 
     return Response(serializer.data)
+
+
+def _ensure_participant(request, conversation_id):
+    return ConversationParticipant.objects.filter(
+        conversation_id=conversation_id,
+        user=request.user,
+    ).exists()
 
 
 @api_view(["GET"])
@@ -89,9 +116,17 @@ def conversation_messages(
     request,
     conversation_id
 ):
+    if not _ensure_participant(request, conversation_id):
+        return Response(
+            {"error": "Not a participant of this conversation"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     messages = Message.objects.filter(
         conversation_id=conversation_id
     ).order_by("created_at")
+
+    messages.exclude(sender=request.user).update(is_read=True)
 
     serializer = MessageSerializer(
         messages,
@@ -107,10 +142,16 @@ def send_message(
     request,
     conversation_id
 ):
+    if not _ensure_participant(request, conversation_id):
+        return Response(
+            {"error": "Not a participant of this conversation"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     text = request.data.get(
         "content",
         ""
-    )
+    ).strip()
 
     if not text:
         return Response(

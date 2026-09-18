@@ -98,6 +98,25 @@ def user_profile(request, user_id):
     return Response(serializer.data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def search_users(request):
+    query = request.query_params.get("q", "").strip()
+
+    if not query:
+        return Response([])
+
+    users = User.objects.filter(
+        username__icontains=query
+    ).exclude(
+        id=request.user.id
+    )[:15]
+
+    serializer = UserSerializer(users, many=True, context={"request": request})
+
+    return Response(serializer.data)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def follow_user(request, user_id):
